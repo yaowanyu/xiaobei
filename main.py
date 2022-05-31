@@ -12,11 +12,10 @@ PASSWORD = os.getenv("XB_PASSWORD")
 LOCATION = os.getenv("XB_LOCATION")
 # 位置，可选通过接口获取
 COORD = os.getenv("XB_COORD")
-# 邮件开关
-# IS_EMAIL = os.getenv("XB_IS_EMAIL") #不要开关直接干掉
-# 邮箱账号
-EMAIL = os.getenv("XB_EMAIL")
-
+#tgbot推送
+TG_BOT_TOKEN = os.getenv("TG_BOT_TOKEN")
+TG_CHATID = os.getenv("TG_CHATID")
+TG_URL = os.getenv("TG_URL")
 #server酱
 SENDKEY = os.getenv("XB_SENDKEY")
 
@@ -47,8 +46,6 @@ def is_open():
     else:
         print("请在浏览器里打开链接获取经纬度：https://api.xiaobaibk.com/api/map/")
 
-if EMAIL is None:
-    EMAIL = ''
 
 if SENDKEY is None:
     SENDKEY =''
@@ -56,14 +53,18 @@ if SENDKEY is None:
 if WX_APP is None:
     WX_APP = ''
 
+if TG_BOT_TOKEN is None:
+    TG_BOT_TOKEN = ''
+
+if TG_CHATID is None:
+    TG_CHATID = ''
+
 # 判断环境变量里是否为空
 if USERNAME is None or PASSWORD is None:
     USERNAME = str(input("请输入小北学生账号："))
     PASSWORD = str(input("请输入小北学生密码："))
     is_open()
     LOCATION = str(input("请将您所复制的经纬度粘贴到此处："))
-    # COORD = str(input("请将您所在的区域【如：中国-云南省-昆明市-官渡区】："))
-    EMAIL = input("接收邮箱账号,留空则不开启:")
     print("登录网站【https://sct.ftqq.com/】获取sendkey")
     SENDKEY = input("[留空则不开启]server酱通知密钥:")
     print("微信通知,开启需填写KEY，教程：https://ghurl.github.io/?130")
@@ -119,20 +120,6 @@ def get_param(coord):
     }
 
 
-def send_mail(context):
-    url = "https://api.xiaobaibk.com/api/mail/"
-    js = {'mailto': EMAIL, 'content': context}
-    # {"code":200,"msg":"\u606d\u559c\u60a8\u53d1\u9001\u6210\u529f\u4e86"}
-    try:
-        result = requests.post(url, js).text
-    except:
-        print("邮件发送不成功，估计邮件服务器崩了吧")
-    type = json.loads(result)['code']
-    if type == 200:
-        print("邮件通知发送成功！")
-    else:
-        print("邮件通知发送失败，原因：" + json.loads(result)['msg'])
-
 def sc_send(context):
     baseUrl = 'https://sctapi.ftqq.com/'+SENDKEY+'.send'
     resp = None
@@ -149,9 +136,24 @@ def sc_send(context):
     if resp['code'] != 0:
         print(resp['message'])
 
-
-
-
+def tg_send(context):
+    bot_token = TG_BOT_TOKEN
+    chat_id = TG_CHATID
+    if not bot_token or not chat_id:
+        print("未设置bot_token或chat_id")
+        return
+    if TG_URL :
+        url = f"{TG_URL}/bot{TG_BOT_TOKEN}/sendMessage"
+    else:
+        url = f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage"
+    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+    payload = {'chat_id': str(TG_CHATID), 'text': f'{context}', 'disable_web_page_preview': 'true'}
+    try:
+        response = requests.post(url=url,headers=headers,params=payload)
+    except:
+        "TG推送失败"
+    else:
+        "TG推送完成"
 # 一言
 def yiyan():
     try:
@@ -260,9 +262,6 @@ if __name__ == '__main__':
     if code != 200:
         print("Sorry! Login failed! Error：" + msg)
 
-        # 发送邮件
-        if EMAIL != '':
-            send_mail("登录失败，失败原因：" + msg)
 
         # server酱
         if SENDKEY != '':
@@ -280,7 +279,18 @@ if __name__ == '__main__':
 
         # 获取位置
         if COORD is None or COORD == '':
-            COORD = get_location()
+            try:
+                COORD = get_location()
+            except:
+
+                print("位置信息获取失败！")
+                err = '😩可以正常登录但是位置信息获取失败，所以打卡失败了'
+                if SENDKEY != '':
+                    sc_send(err)
+                if WX_APP != '':
+                    wxapp_notify(err, '小北打卡失败')
+                os._exit(0)
+
         else:
             pass
 
@@ -296,33 +306,38 @@ if __name__ == '__main__':
             respond = requests.post(url=health, headers=HEADERS, json=health_param).text
         except:
             print("打卡失败！")
-            wxapp_notify('😩可以正常登录但是遇到异常，原因不明，请自行打卡', '小北打卡失败')
+            if SENDKEY != '':
+                sc_send("打卡失败！")
+            if WX_APP != '':
+                wxapp_notify('😩可以正常登录但是遇到异常，原因不明，请自行打卡', '小北打卡失败')
             os._exit(0)
         # error return {'msg': None, 'code': 500}
         # succeed return {'msg': '操作成功', 'code': 200}
         status = json.loads(respond)['code']
         if status == 200:
             print("恭喜您打卡成功啦！")
-            if EMAIL != '':
-                send_mail("打卡成功啦🎉")
 
             # server酱
             if SENDKEY != '':
                 sc_send("打卡成功啦🎉")
+            
+            if TG_BOT_TOKEN and TG_CHATID != '':
+                tg_send("打卡成功啦🎉")
 
             #
             if WX_APP != '':
                 wxapp_notify("打卡成功啦🎉")
         else:
             print("Error：" + json.loads(respond)['msg'])
-            if EMAIL != '':
-                send_mail("🙁抱歉打卡失败了，原因未知，请自行手动打卡，谢谢")
 
             print(SENDKEY)
 
             # server酱
             if SENDKEY != '':
                 sc_send("🙁抱歉打卡失败了，原因未知，请自行手动打卡，谢谢")
+
+            if TG_BOT_TOKEN and TG_CHATID != '':
+                tg_send("🙁抱歉打卡失败了，原因未知，请自行手动打卡，谢谢")
 
             #
             if WX_APP != '':

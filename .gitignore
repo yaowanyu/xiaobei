@@ -1,1 +1,6 @@
 /.idea
+/venv
+venv/
+*.pyc
+.vscode/settings.json
+xiaobei_health_multiplay_local.py
